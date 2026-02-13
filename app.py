@@ -1,74 +1,136 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go # 引入更高级的绘图库
+import os
 
-# 设置网页标题和布局
-st.set_page_config(page_title="学生成绩测评系统", layout="wide")
+st.set_page_config(page_title="学生全科诊断系统", layout="wide")
+st.title('🎓 学生全科能力诊断系统')
 
-st.title('🎓 学生成绩智能测评系统')
+# --- 1. 数据加载逻辑 (自动读取 data.xlsx 或 上传) ---
+data_file = None
+default_file = 'data.xlsx'
 
-# 侧边栏：上传文件
 with st.sidebar:
-    st.header("📂 教师管理后台")
-    uploaded_file = st.file_uploader("请上传成绩单 Excel", type=["xlsx"])
-    st.info("💡 提示：Excel 需包含 '姓名' 和 '总分赋分' 列")
+    st.header("📂 教师管理")
+    uploaded_file = st.file_uploader("更新成绩单", type=["xlsx"])
+    if uploaded_file:
+        data_file = uploaded_file
+    elif os.path.exists(default_file):
+        data_file = default_file
+        st.success("✅ 已自动加载云端成绩单")
 
-if uploaded_file is not None:
-    # 1. 读取数据
-    df = pd.read_excel(uploaded_file)
-    df = df.dropna(subset=['姓名']) # 清除空行
-    
-    # 自动计算全班排名 (从高到低)
-    if '总分赋分' in df.columns:
-        df['班级排名'] = df['总分赋分'].rank(ascending=False, method='min')
-    
-    # --- 第一部分：全班概况 (老师看) ---
-    st.header("📊 全班考情分析")
-    
-    # 过滤掉 0 分（缺考）来计算平均分，这样更准确
-    valid_scores = df[df['总分赋分'] > 0]
-    
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    kpi1.metric("参考人数", len(df))
-    kpi2.metric("班级平均分", f"{valid_scores['总分赋分'].mean():.1f}")
-    kpi3.metric("最高分", int(df['总分赋分'].max()))
-    kpi4.metric("及格率 (≥360)", f"{(len(df[df['总分赋分']>=360])/len(df)*100):.1f}%")
+if data_file is None:
+    st.warning("请上传 Excel 或在 GitHub 存入 data.xlsx")
+    st.stop()
 
-    # 折叠显示图表，让界面更清爽
-    with st.expander("点击查看分数分布图", expanded=True):
-        fig = px.histogram(df, x='总分赋分', nbins=20, title="成绩分布直方图", text_auto=True)
-        st.plotly_chart(fig, use_container_width=True)
-
-    st.divider() # 分割线
-
-    # --- 第二部分：个人查询 (学生/家长看) ---
-    st.header("🔍 学生个人查分")
+# --- 2. 数据预处理 (智能识别科目) ---
+try:
+    df = pd.read_excel(data_file)
+    df = df.dropna(subset=['姓名']) # 去除空行
     
-    # 搜索框：选择学生姓名
-    student_list = df['姓名'].unique().tolist()
-    selected_student = st.selectbox("请选择或输入学生姓名：", student_list)
+    # 【核心黑科技】：自动找出哪些列是“科目”
+    # 逻辑：排除掉 姓名、学号、总分、排名 等非科目列，剩下的数字列都算科目
+    exclude_cols = ['姓名', '学号', '考号', '班级', '学校', '区县', '总分', '总分赋分', '班级排名', '年级排名', '校名']
+    
+    # 找出所有数字类型的列
+    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+    # 从数字列里，剔除掉上面的 exclude_cols
+    subject_cols = [c for c in numeric_cols if c not in exclude_cols]
+
+    if not subject_cols:
+        st.error("未找到科目列！请检查Excel表头，确保科目分数为数字格式。")
+        st.stop()
+
+    # --- 3. 全班概况 (班级维度的分析) ---
+    st.header("📊 班级整体学科分析")
+    
+    # 计算全班各科平均分
+    class_avg = df[subject_cols].mean().round(1)
+    
+    # 展示各科平均分 (柱状图)
+    st.caption("全班各科平均分对比：")
+    st.bar_chart(class_avg)
+
+    st.divider()
+
+    # --- 4. 个人全科诊断 (六边形雷达图) ---
+    st.header("🔍 学生个人深度诊断")
+    
+    selected_student = st.selectbox("请选择学生姓名：", df['姓名'].unique())
     
     if selected_student:
-        # 找到该学生的那一行数据
+        # 取出该学生的数据
         student_data = df[df['姓名'] == selected_student].iloc[0]
-        my_score = student_data['总分赋分']
-        my_rank = int(student_data['班级排名'])
         
-        # 你的成绩单卡片
-        st.success(f"正在查看 【{selected_student}】 的成绩报告")
+        # 准备画图数据
+        student_scores = [student_data[sub] for sub in subject_cols] # 学生的每科分数
+        avg_scores = [class_avg[sub] for sub in subject_cols]       # 班级的每科平均分
         
-        col1, col2, col3 = st.columns(3)
-        col1.metric("我的总分", my_score)
-        # 根据排名显示不同颜色（前10名显示绿色奖杯）
-        col2.metric("班级排名", f"第 {my_rank} 名", delta="🏆 优秀" if my_rank <= 10 else None)
-        
-        # 专家级分析：计算超过了多少人
-        beat_ratio = len(df[df['总分赋分'] < my_score]) / len(df) * 100
-        col3.progress(beat_ratio / 100, text=f"击败了全班 {beat_ratio:.1f}% 的同学")
-        
-        # 显示详细数据表（只显示该生）
-        st.caption("详细数据：")
-        st.dataframe(df[df['姓名'] == selected_student])
+        # 为了让雷达图闭合，需要把第一个数据重复加到最后
+        plot_subjects = subject_cols + [subject_cols[0]]
+        plot_student_scores = student_scores + [student_scores[0]]
+        plot_avg_scores = avg_scores + [avg_scores[0]]
 
-else:
-    st.write("👈 请在左侧上传 Excel 文件开始分析")
+        # --- 开始画雷达图 ---
+        fig = go.Figure()
+
+        # 画第一层：班级平均线 (作为参考标准，灰色)
+        fig.add_trace(go.Scatterpolar(
+            r=plot_avg_scores,
+            theta=plot_subjects,
+            fill='toself',
+            name='班级平均水平',
+            line_color='gray',
+            opacity=0.4
+        ))
+
+        # 画第二层：学生个人线 (蓝色，高亮)
+        fig.add_trace(go.Scatterpolar(
+            r=plot_student_scores,
+            theta=plot_subjects,
+            fill='toself',
+            name=f'{selected_student} 的成绩',
+            line_color='#1f77b4'
+        ))
+
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, max(max(plot_student_scores), max(plot_avg_scores)) + 10] # 自动调整刻度范围
+                )),
+            showlegend=True,
+            title=f"【{selected_student}】 学科能力雷达图"
+        )
+        
+        # 左右布局：左边放图，右边放具体的表格
+        col1, col2 = st.columns([3, 2])
+        
+        with col1:
+            st.plotly_chart(fig, use_container_width=True)
+            if '总分' in df.columns or '总分赋分' in df.columns:
+                 total_col = '总分' if '总分' in df.columns else '总分赋分'
+                 st.metric("总分", student_data[total_col])
+
+        with col2:
+            st.subheader("📝 单科详细诊断")
+            # 制作一个对比表格
+            comparison_data = []
+            for sub in subject_cols:
+                score = student_data[sub]
+                avg = class_avg[sub]
+                diff = score - avg
+                status = "🟢 优势" if diff > 0 else "🔴 需努力"
+                comparison_data.append({
+                    "科目": sub,
+                    "我的分数": score,
+                    "班级平均": avg,
+                    "差值": f"{diff:+.1f}",
+                    "状态": status
+                })
+            
+            st.dataframe(pd.DataFrame(comparison_data), hide_index=True)
+
+except Exception as e:
+    st.error(f"发生错误：{e}")
+    st.info("请检查Excel中是否包含非数字的干扰列，或者表头是否正确。")
