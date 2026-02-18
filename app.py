@@ -4,31 +4,29 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 # --- 1. 页面配置 ---
-st.set_page_config(page_title="学生全科诊断系统 (Pro Max)", layout="wide", page_icon="🎓")
+st.set_page_config(page_title="学情诊断与管理系统 (旗舰版)", layout="wide", page_icon="🎓")
 
 # ==============================================================================
-# ⚙️ 【中央配置区域】
+# ⚙️ 【配置区域】(请修改这里的链接和密码)
 # ==============================================================================
 
-# --- 1. 总成绩表 (用于查总分、排名) ---
-# 必须填入两个链接！
-SCORE_URL_PHYSICS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyhhA4C2A9hp-2165uyRgqheKfCccT5NN0dp_FOW2Jl8FE4VmAMPajsWKiTEOCcqIxhIDnuIUwOoQ0/pub?gid=0&single=true&output=csv"  # 👈 物理方向总分表 (昨天的物理表)
-SCORE_URL_HISTORY = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyhhA4C2A9hp-2165uyRgqheKfCccT5NN0dp_FOW2Jl8FE4VmAMPajsWKiTEOCcqIxhIDnuIUwOoQ0/pub?gid=1671669597&single=true&output=csv"  # 👈 历史方向总分表 (昨天的历史表)
+# 🔑 管理员密码 (⚠️请修改)
+ADMIN_PASSWORD = "123123"
 
-# --- 2. 各科深度诊断表 (用于看知识点雷达图) ---
-# 格式：三层表头 (题目-知识点-满分)
-# 💡 提示：没做好的科目就留空 ""，会自动隐藏
+# 1. 总成绩表 (用于查总分、班级PK)
+SCORE_URL_PHYSICS = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyhhA4C2A9hp-2165uyRgqheKfCccT5NN0dp_FOW2Jl8FE4VmAMPajsWKiTEOCcqIxhIDnuIUwOoQ0/pub?gid=0&single=true&output=csv"  # 👈 物理方向总分链接
+SCORE_URL_HISTORY = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRyhhA4C2A9hp-2165uyRgqheKfCccT5NN0dp_FOW2Jl8FE4VmAMPajsWKiTEOCcqIxhIDnuIUwOoQ0/pub?gid=1671669597&single=true&output=csv"  # 👈 历史方向总分链接
+
+# 2. 各科深度诊断表 (用于知识点分析)
 SUBJECT_URLS = {
     # --- 理科 ---
-    "⚡ 物理诊断": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRLNvn1FqBT1F5w1J7ENAUA3YQuOvfLoohdW4ihjsEZkC_R8JZMCQPqtthzzitC2ZU3mvOMRUmo5omH/pub?gid=761604232&single=true&output=csv",  # 👈 今天的物理详细表
+    "⚡ 物理诊断": "https://docs.google.com/spreadsheets/d/e/2PACX-1vRLNvn1FqBT1F5w1J7ENAUA3YQuOvfLoohdW4ihjsEZkC_R8JZMCQPqtthzzitC2ZU3mvOMRUmo5omH/pub?gid=761604232&single=true&output=csv", # 👈 今天的物理详细表
     "🧪 化学诊断": "",
     "🧬 生物诊断": "",
-    
     # --- 文科 ---
     "📜 历史诊断": "",
     "🌍 地理诊断": "",
     "⚖️ 政治诊断": "",
-
     # --- 主科 ---
     "📐 数学诊断": "",
     "📖 语文诊断": "",
@@ -41,44 +39,69 @@ SUBJECT_URLS = {
 st.markdown("""
 <style>
     .metric-card { background-color: #f8f9fa; border-left: 5px solid #1f77b4; padding: 15px; margin-bottom: 10px; border-radius: 5px; box-shadow: 1px 1px 3px rgba(0,0,0,0.1); }
+    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
+    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 侧边栏 ---
+# --- 侧边栏逻辑 ---
 with st.sidebar:
     st.title("🎓 系统导航")
     
-    # 1. 先选方向 (恢复了这个关键开关！)
+    # 1. 方向选择
     direction = st.selectbox("请选择分科方向", ["物理方向", "历史方向"])
-    
     st.divider()
 
-    # 2. 动态生成功能菜单
-    available_menus = ["📑 成绩查询 (总分)"]
-    for name, url in SUBJECT_URLS.items():
-        if url and url.strip():
-            available_menus.append(name)
+    # 2. 身份切换 (学生 vs 管理员)
+    mode = st.radio("身份选择", ["👨‍🎓 学生/家长查询", "👨‍🏫 管理者入口"])
     
-    menu = st.radio("请选择功能：", available_menus)
-    
-    st.divider()
-    
-    # 3. 身份验证
-    st.markdown("### 🔐 身份验证")
-    input_name = st.text_input("学生姓名")
-    input_id = st.text_input("考号/学号")
+    if mode == "👨‍🎓 学生/家长查询":
+        # 学生菜单
+        available_menus = ["📑 成绩查询 (总分)"]
+        for name, url in SUBJECT_URLS.items():
+            if url and url.strip():
+                available_menus.append(name)
+        menu = st.radio("功能选择", available_menus)
+        
+        st.divider()
+        st.markdown("### 🔐 学生验证")
+        input_name = st.text_input("学生姓名")
+        input_id = st.text_input("考号/学号")
+        is_admin = False
+        
+    else:
+        # 管理员菜单
+        st.divider()
+        st.markdown("### 🔐 管理员登录")
+        pwd = st.text_input("请输入密码", type="password")
+        
+        if pwd == ADMIN_PASSWORD:
+            st.success("✅ 身份验证通过")
+            is_admin = True
+            # 管理员专属菜单
+            menu = st.radio("管理面板", ["📊 班级成绩PK", "📈 总体学情概览", "🔍 知识点共性诊断"])
+        else:
+            if pwd:
+                st.error("❌ 密码错误")
+            is_admin = False
+            menu = None
 
-# --- 通用函数 ---
-def authenticate(df, name, student_id, id_col_name='考号'):
-    df[id_col_name] = df[id_col_name].astype(str).str.strip()
-    df['姓名'] = df['姓名'].astype(str).str.strip()
-    student = df[(df['姓名'] == name.strip()) & (df[id_col_name] == student_id.strip())]
-    return student.iloc[0] if len(student) > 0 else None
+# --- 函数区 ---
 
+# 1. 通用数据加载
+def load_data(url, header_lines=0):
+    try:
+        return pd.read_csv(url, header=header_lines, on_bad_lines='skip')
+    except:
+        return None
+
+# 2. 核心功能：绘制单科雷达图 (您要求的完整版功能)
 def render_subject_analysis(subject_name, url, student_name, student_id):
     st.header(f"{subject_name} - 深度学情报告")
     try:
+        # 读取三层表头 (0:题目, 1:考点, 2:满分)
         df = pd.read_csv(url, header=[0, 1, 2], on_bad_lines='skip')
+        
         # 自动定位列
         name_idx, id_idx = -1, -1
         for i, col in enumerate(df.columns):
@@ -89,7 +112,7 @@ def render_subject_analysis(subject_name, url, student_name, student_id):
             st.error("Excel格式错误：未找到姓名或考号列。")
             return
 
-        # 验证
+        # 验证身份
         all_names = df.iloc[:, name_idx].astype(str).str.strip().values
         all_ids = df.iloc[:, id_idx].astype(str).str.strip().values
         
@@ -103,24 +126,34 @@ def render_subject_analysis(subject_name, url, student_name, student_id):
             st.warning(f"未找到 {student_name} 的数据，可能是缺考或未录入。")
             return
 
-        # 分析
+        # 分析逻辑
         st.success(f"✅ 数据加载成功")
+        
+        # 聚合知识点数据
         knowledge_map = {} 
         for col in df.columns:
             q_name, k_point = str(col[0]).strip(), str(col[1]).strip()
             try: full = float(col[2])
             except: full = 0
+            
+            # 跳过无效列
             if '姓名' in q_name or '考号' in q_name or full <= 0: continue
             
-            if k_point not in knowledge_map: knowledge_map[k_point] = {'my': 0, 'full': 0, 'class_total': 0}
+            if k_point not in knowledge_map:
+                knowledge_map[k_point] = {'my': 0, 'full': 0, 'class_total': 0}
+            
+            # 获取我的得分
             try: my_s = float(df.iloc[found_idx][col])
             except: my_s = 0
+            
+            # 获取班级平均
             class_s = pd.to_numeric(df[col], errors='coerce').mean()
+            
             knowledge_map[k_point]['my'] += my_s
             knowledge_map[k_point]['full'] += full
             knowledge_map[k_point]['class_total'] += class_s
         
-        # 画图
+        # 整理画图数据
         k_data = []
         for kp, val in knowledge_map.items():
             k_data.append({
@@ -131,93 +164,176 @@ def render_subject_analysis(subject_name, url, student_name, student_id):
             })
         
         df_kp = pd.DataFrame(k_data)
+        
+        # 开始画图
         if not df_kp.empty:
             c1, c2 = st.columns([1, 1])
             with c1:
+                # 雷达图绘制
                 fig = go.Figure()
                 cats = df_kp['知识点'].tolist() + [df_kp['知识点'].tolist()[0]]
                 mys = df_kp['我的掌握率'].tolist() + [df_kp['我的掌握率'].tolist()[0]]
                 avgs = df_kp['班级平均'].tolist() + [df_kp['班级平均'].tolist()[0]]
+                
                 fig.add_trace(go.Scatterpolar(r=avgs, theta=cats, fill='toself', name='班级平均', line_color='#cccccc'))
                 fig.add_trace(go.Scatterpolar(r=mys, theta=cats, fill='toself', name='我的掌握', line_color='#1f77b4'))
                 fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 100])), height=350, margin=dict(t=20, b=20))
                 st.plotly_chart(fig, use_container_width=True)
+            
             with c2:
+                # 智能建议
                 st.subheader("💡 诊断建议")
                 weak = df_kp[df_kp['我的掌握率'] < df_kp['班级平均']]
                 if not weak.empty:
                     st.error("🚨 **需重点关注的薄弱点：**")
                     for _, row in weak.iterrows():
-                        st.write(f"- **{row['知识点']}** (掌握率 {row['我的掌握率']}%)")
+                        st.markdown(f"- **{row['知识点']}** <br> (得分 {row['得分']}/{row['满分']} | 掌握率 {row['我的掌握率']}%)", unsafe_allow_html=True)
                 else:
-                    st.success("🎉 基础非常扎实！")
+                    st.success("🎉 你的基础非常扎实，所有模块均超过班级平均水平！")
+                    
+            # 展示详细数据表
+            st.divider()
+            st.dataframe(df_kp, use_container_width=True)
 
     except Exception as e:
         st.error(f"数据读取失败: {e}")
 
 # ==============================================================================
-# 主逻辑
+# 🚀 逻辑分支 A: 管理员模式
 # ==============================================================================
-
-if not input_name or not input_id:
-    st.info("👈 请先在左侧输入姓名和考号。")
-    st.stop()
-
-if menu == "📑 成绩查询 (总分)":
-    # 1. 自动判断要读哪个表
-    if direction == "物理方向":
-        target_url = SCORE_URL_PHYSICS
-    else:
-        target_url = SCORE_URL_HISTORY
+if is_admin:
+    st.title(f"👨‍🏫 教务管理后台 - {direction}")
     
-    # 2. 读取并展示
-    if target_url:
-        try:
-            df = pd.read_csv(target_url, on_bad_lines='skip')
-            student = authenticate(df, input_name, input_id, '考号' if '考号' in df.columns else '学号')
-            if student is None:
-                st.error(f"❌ 在【{direction}】表中未找到该学生。")
+    # 确定读取哪个总分表
+    target_url = SCORE_URL_PHYSICS if direction == "物理方向" else SCORE_URL_HISTORY
+    
+    if menu == "📊 班级成绩PK":
+        if not target_url:
+            st.warning("暂未配置总分表链接。")
+        else:
+            df = load_data(target_url)
+            if df is not None and '班级' in df.columns:
+                st.header("🏆 班级平均分对比")
+                
+                # 自动识别科目列 (排除姓名考号等)
+                exclude = ['姓名', '考号', '学号', '班级', '排名', '总分', '班级排名', '年级排名']
+                subjects = [c for c in df.columns if c not in exclude and pd.to_numeric(df[c], errors='coerce').notna().all()]
+                
+                # 1. 计算各班平均分
+                class_avg = df.groupby('班级')[subjects + ['总分']].mean().round(1).reset_index()
+                
+                # 2. 展示总分PK图
+                fig_total = px.bar(class_avg, x='班级', y='总分', color='班级', text_auto=True, title="各班总平均分对比")
+                st.plotly_chart(fig_total, use_container_width=True)
+                
+                # 3. 展示单科PK图
+                st.subheader("📝 单科平均分对比")
+                sel_sub = st.selectbox("选择科目查看", subjects)
+                fig_sub = px.bar(class_avg, x='班级', y=sel_sub, color='班级', text_auto=True, title=f"各班{sel_sub}平均分")
+                st.plotly_chart(fig_sub, use_container_width=True)
+                
+                with st.expander("查看详细数据表"):
+                    st.dataframe(class_avg)
             else:
-                c1, c2, c3 = st.columns(3)
-                c1.metric("姓名", student['姓名'])
-                c2.metric("方向", direction)
-                
-                # 智能计算总分
-                if '总分' in student:
-                    total = student['总分']
-                else:
-                    exclude = ['姓名', '考号', '学号', '班级', '排名']
-                    cols = [c for c in df.columns if c not in exclude and pd.to_numeric(student[c], errors='coerce') >= 0]
-                    total = sum([student[c] for c in cols])
-                
-                c3.metric("全科总分", f"{total}")
-                
-                st.divider()
-                st.subheader("各科得分概览")
-                
-                exclude_cols = ['姓名', '考号', '学号', '班级', '总分', '班级排名', '年级排名', 'Unnamed', '序号']
-                subject_cols = []
-                for col in df.columns:
-                    if col not in exclude_cols and not str(col).startswith('Unnamed'):
-                        if pd.to_numeric(student[col], errors='coerce') >= 0:
-                            subject_cols.append(col)
-                
-                if subject_cols:
-                    chart_data = pd.DataFrame({
-                        "科目": subject_cols,
-                        "得分": [student[c] for c in subject_cols]
-                    })
-                    fig = px.bar(chart_data, x='科目', y='得分', text_auto=True, color='科目')
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("未检测到有效科目成绩。")
-        except Exception as e:
-            st.error(f"无法读取总分表，请检查链接。错误: {e}")
-    else:
-        st.warning(f"⚠️ 暂未配置【{direction}】的总分表链接。")
+                st.error("读取失败或表格中缺少【班级】列，请检查Excel。")
 
+    elif menu == "📈 总体学情概览":
+        if target_url:
+            df = load_data(target_url)
+            if df is not None:
+                c1, c2, c3 = st.columns(3)
+                c1.metric("参考总人数", len(df))
+                c2.metric("年级总均分", round(df['总分'].mean(), 1) if '总分' in df else "N/A")
+                c3.metric("最高分", df['总分'].max() if '总分' in df else "N/A")
+                
+                st.subheader("分数段分布")
+                if '总分' in df:
+                    fig_hist = px.histogram(df, x="总分", nbins=20, title="年级总分分布图", color_discrete_sequence=['#1f77b4'])
+                    st.plotly_chart(fig_hist, use_container_width=True)
+
+    elif menu == "🔍 知识点共性诊断":
+        st.info("此处分析所有学生的知识点掌握情况，寻找共性薄弱点。")
+        avail_subs = [k for k, v in SUBJECT_URLS.items() if v]
+        sel_diagnosis = st.selectbox("选择要分析的学科", avail_subs)
+        
+        if sel_diagnosis:
+            diag_url = SUBJECT_URLS[sel_diagnosis]
+            try:
+                df_diag = pd.read_csv(diag_url, header=[0, 1, 2], on_bad_lines='skip')
+                
+                k_stats = {}
+                for col in df_diag.columns:
+                    q_name, k_point = str(col[0]).strip(), str(col[1]).strip()
+                    try: full = float(col[2])
+                    except: full = 0
+                    if full <= 0 or '姓名' in q_name: continue
+                    
+                    if k_point not in k_stats: k_stats[k_point] = []
+                    col_avg = pd.to_numeric(df_diag[col], errors='coerce').mean()
+                    k_stats[k_point].append(col_avg / full)
+                
+                k_final = []
+                for kp, rates in k_stats.items():
+                    avg_rate = sum(rates) / len(rates) * 100
+                    k_final.append({"知识点": kp, "年级平均掌握率": round(avg_rate, 1)})
+                
+                df_k = pd.DataFrame(k_final).sort_values("年级平均掌握率")
+                
+                fig_k = px.bar(df_k, x="年级平均掌握率", y="知识点", orientation='h', 
+                              title=f"{sel_diagnosis} - 年级知识点掌握率排行",
+                              color="年级平均掌握率", color_continuous_scale='RdYlGn')
+                st.plotly_chart(fig_k, use_container_width=True)
+                
+                if not df_k.empty:
+                    st.error(f"🚨 年级最薄弱知识点：{df_k.iloc[0]['知识点']} (掌握率仅 {df_k.iloc[0]['年级平均掌握率']}%)")
+            except:
+                st.error("无法读取该学科数据，请检查链接。")
+
+# ==============================================================================
+# 🚀 逻辑分支 B: 学生模式
+# ==============================================================================
 else:
-    # 各科诊断 (不分方向，直接读配置的链接)
-    target_url = SUBJECT_URLS.get(menu)
-    if target_url:
-        render_subject_analysis(menu, target_url, input_name, input_id)
+    if not input_name or not input_id:
+        st.info("👈 请在左侧输入姓名和考号。")
+        st.stop()
+        
+    if menu == "📑 成绩查询 (总分)":
+        target_url = SCORE_URL_PHYSICS if direction == "物理方向" else SCORE_URL_HISTORY
+        if target_url:
+            try:
+                df = pd.read_csv(target_url, on_bad_lines='skip')
+                # 兼容学号或考号列名
+                id_col = '考号' if '考号' in df.columns else '学号'
+                if id_col not in df.columns:
+                    st.error("Excel中缺少【考号】或【学号】列")
+                    st.stop()
+
+                df[id_col] = df[id_col].astype(str).str.strip()
+                student = df[(df['姓名'].astype(str).str.strip() == input_name.strip()) & 
+                             (df[id_col] == input_id.strip())]
+                
+                if len(student) == 0:
+                    st.error("未找到该学生，请检查姓名考号或分科方向。")
+                else:
+                    stu_data = student.iloc[0]
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("姓名", stu_data['姓名'])
+                    total = stu_data['总分'] if '总分' in stu_data else "计算中"
+                    c2.metric("总分", total)
+                    rank = stu_data['班级排名'] if '班级排名' in stu_data else "N/A"
+                    c3.metric("班级排名", rank)
+                    
+                    st.divider()
+                    # 绘制柱状图
+                    exclude = ['姓名', '考号', '学号', '班级', '排名', '总分', '班级排名', '年级排名']
+                    cols = [c for c in df.columns if c not in exclude and pd.to_numeric(stu_data[c], errors='coerce') >= 0]
+                    if cols:
+                        chart_data = pd.DataFrame({"科目": cols, "得分": [stu_data[c] for c in cols]})
+                        st.plotly_chart(px.bar(chart_data, x='科目', y='得分', text_auto=True, color='科目'), use_container_width=True)
+            except Exception as e:
+                st.error(f"查询出错: {e}")
+    else:
+        # 学生-单科诊断 (直接调用上面写好的完整函数)
+        target_url = SUBJECT_URLS.get(menu)
+        if target_url:
+            render_subject_analysis(menu, target_url, input_name, input_id)
