@@ -128,8 +128,8 @@ st.markdown("""
         text-align: center;
         font-size: 18px;
         font-weight: bold;
-        margin-top: 10px;
-        margin-bottom: 25px;
+        margin-top: 5px;
+        margin-bottom: 35px;
         box-shadow: 0 4px 12px rgba(252, 211, 77, 0.2);
     }
     .main-title { text-align: center; color: #1E3A8A; font-size: 34px; font-weight: 800; margin-bottom: 15px; }
@@ -152,23 +152,21 @@ selected_nav = option_menu(
 if selected_nav in ["成绩总览", "深度诊断"]:
     
     if not st.session_state.logged_in_student:
-        # --- 华丽的登录页头部排版 ---
+        # --- 1. 顶部标题和横幅 ---
         st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
-        
-        # 居中并排显示两个小图标 (控制了完美比例)
-        img_col1, img_col2, img_col3, img_col4 = st.columns([3, 1, 1, 3])
-        with img_col2:
-            if os.path.exists("panda.png"): st.image("panda.png", width=110)
-        with img_col3:
-            if os.path.exists("star.png"): st.image("star.png", width=110)
-            
-        # 自动提取前三名的动态光荣榜
         banner_text = get_dynamic_top3_banner()
         st.markdown(f'<div class="congrats-banner">{banner_text}</div>', unsafe_allow_html=True)
         
-        # 登录框
-        col1, col2, col3 = st.columns([1, 1.5, 1])
-        with col2:
+        # --- 2. 左右护法 + 登录框的完美排版 ---
+        # 1:1.8:1 的比例既能保证图片大小合适，又能凸显中间的登录框
+        col_left, col_mid, col_right = st.columns([1, 1.8, 1])
+        
+        with col_left:
+            # 加入两个空行，让图片往下沉一点，和登录框对齐
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            if os.path.exists("panda.png"): st.image("panda.png", use_container_width=True)
+            
+        with col_mid:
             with st.form("student_login"):
                 st.markdown("<h3 style='text-align: center; color: #555;'>👨‍🎓 学生/家长登录入口</h3><br>", unsafe_allow_html=True)
                 direction = st.selectbox("📝 选择方向", ["物理方向", "历史方向"])
@@ -181,6 +179,11 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                         st.session_state.logged_in_direction = direction
                         st.rerun()
                     else: st.error("⚠️ 请完整填写姓名和考号")
+        
+        with col_right:
+            # 同样加入空行向下对齐
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            if os.path.exists("star.png"): st.image("star.png", use_container_width=True)
     
     else:
         # 学生已登录后的页面逻辑 (保持不变)
@@ -296,21 +299,30 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                                             st.markdown(f"<div class='ai-box'><b>AI导师：</b><br><br>{ai_reply}</div>", unsafe_allow_html=True)
 
 # ==============================================================================
-# 🚀 页面 3: 教师后台
+# 🚀 页面 3: 教师后台 (同样增加了左右护法)
 # ==============================================================================
 elif selected_nav == "教师后台":
     if not st.session_state.is_admin:
-        st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1><br>", unsafe_allow_html=True)
-        col1, col2, col3 = st.columns([1, 1.5, 1])
-        with col2:
+        st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
+        st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True) # 占位
+        
+        col_left, col_mid, col_right = st.columns([1, 1.8, 1])
+        with col_left:
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            if os.path.exists("panda.png"): st.image("panda.png", use_container_width=True)
+        with col_mid:
             with st.form("admin_login"):
-                st.markdown("<h3 style='text-align: center;'>👨‍🏫 教务管理中枢</h3>", unsafe_allow_html=True)
+                st.markdown("<h3 style='text-align: center; color: #555;'>👨‍🏫 教务管理中枢</h3><br>", unsafe_allow_html=True)
                 pwd = st.text_input("🔐 管理密码", type="password")
                 if st.form_submit_button("验证进入", use_container_width=True):
                     if pwd == ADMIN_PASSWORD:
                         st.session_state.is_admin = True
                         st.rerun()
                     else: st.error("密码错误")
+        with col_right:
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            if os.path.exists("star.png"): st.image("star.png", use_container_width=True)
+            
     else:
         c1, c2 = st.columns([5, 1])
         c1.markdown("### ⚙️ 管理员控制台")
