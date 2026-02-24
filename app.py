@@ -5,8 +5,10 @@ import plotly.express as px
 from streamlit_option_menu import option_menu
 import openai
 
-# --- 1. 页面配置 (必须是第一行 Streamlit 命令) ---
-st.set_page_config(page_title="英华学校高中部考试学情智能分析系统", layout="wide", page_icon="🏫", initial_sidebar_state="collapsed")
+# ==============================================================================
+# 1. 页面基础配置 (设置新的主题名称)
+# ==============================================================================
+st.set_page_config(page_title="英华学校高中部考试学情智能分析", layout="wide", page_icon="🏫", initial_sidebar_state="collapsed")
 
 # ==============================================================================
 # 🔐 安全配置读取 (从 secrets 中读取，代码中不再包含任何密码和链接)
@@ -45,7 +47,7 @@ else:
 # 🧠 AI 导师功能定义
 # ==============================================================================
 def get_ai_advice_for_student(student_name, subject, weak_points, strong_points):
-    if not client: return "⚠️ AI 尚未配置，无法生成建议。"
+    if not client: return "⚠️ AI 尚未配置，无法生成建议，请联系管理员。"
     prompt = f"""
     你是一位拥有20年教学经验的高中{subject}金牌教师。
     你的学生 {student_name} 刚完成了一次考试分析。
@@ -64,10 +66,10 @@ def get_ai_advice_for_student(student_name, subject, weak_points, strong_points)
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"AI 生成失败，请稍后再试或检查网络/额度。错误信息：{e}"
+        return f"AI 生成失败，请确认您的 API Key 是否有余额。错误信息：{e}"
 
 def get_ai_advice_for_teacher(subject, weak_points_list):
-    if not client: return "⚠️ AI 尚未配置，无法生成建议。"
+    if not client: return "⚠️ AI 尚未配置，无法生成建议，请联系管理员。"
     prompt = f"""
     你是一位高中教研员。你们学校高三年级刚考完{subject}。
     全校大数据显示，学生们失分最严重的共性薄弱点是：{weak_points_list}。
@@ -86,7 +88,7 @@ def get_ai_advice_for_teacher(subject, weak_points_list):
         return f"AI 生成失败: {e}"
 
 # ==============================================================================
-# --- 初始化状态与 CSS ---
+# --- 初始化状态与全局 CSS ---
 # ==============================================================================
 if 'logged_in_student' not in st.session_state: st.session_state.logged_in_student = None
 if 'logged_in_direction' not in st.session_state: st.session_state.logged_in_direction = None
@@ -98,17 +100,49 @@ def logout():
     st.session_state.is_admin = False
     st.rerun()
 
+# 在这里定义我们新的 CSS 样式
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
     .block-container { padding-top: 1rem !important; padding-bottom: 2rem !important; }
     .stApp { background-color: #f4f7f9; }
+    /* 卡片样式 */
     div[data-testid="stMetric"] { background-color: #ffffff; border-radius: 12px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.03); border: 1px solid #ebeef5; text-align: center; transition: transform 0.2s; }
     div[data-testid="stMetric"]:hover { transform: translateY(-3px); box-shadow: 0 6px 15px rgba(0,0,0,0.08); }
+    /* 表单样式 */
     div[data-testid="stForm"] { background-color: #ffffff; padding: 30px; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.05); border: none; }
     div[data-testid="stFormSubmitButton"] > button { background-color: #0068C9; color: white; font-weight: bold; border-radius: 8px; border: none; padding: 10px 0; }
     div[data-testid="stFormSubmitButton"] > button:hover { background-color: #0052a3; box-shadow: 0 4px 12px rgba(0, 104, 201, 0.3); }
+    /* AI 对话框样式 */
     .ai-box { background: linear-gradient(135deg, #f0f7ff 0%, #e6f3ff 100%); border-left: 5px solid #0068C9; padding: 20px; border-radius: 8px; font-size: 15px; line-height: 1.6; color: #333;}
+    /* 🎉 新增：祝贺横幅样式 */
+    .congrats-banner {
+        background: linear-gradient(90deg, #FFFBEB, #FFF7ED);
+        border: 2px solid #FCD34D;
+        color: #92400E;
+        padding: 15px 20px;
+        border-radius: 12px;
+        text-align: center;
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 12px rgba(252, 211, 77, 0.2);
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(252, 211, 77, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(252, 211, 77, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(252, 211, 77, 0); }
+    }
+    /* 主标题样式 */
+    .main-title {
+        text-align: center;
+        color: #1E3A8A;
+        font-size: 36px;
+        font-weight: 800;
+        margin-bottom: 10px;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -136,10 +170,21 @@ def load_data(url, header_lines=0):
 if selected_nav in ["成绩总览", "深度诊断"]:
     
     if not st.session_state.logged_in_student:
+        # 🎓 显示新的网站主标题
+        st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
+        
+        # 🎉 显示祝贺/广告横幅 (您可以在这里修改文字内容)
+        st.markdown("""
+        <div class="congrats-banner">
+            🎉 热烈祝贺！高三(1)班 <b>李华</b>、<b>张伟</b> 同学在本次市级物理竞赛中荣获一等奖！🏆
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 登录框居中
         col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
-            st.markdown("<br><h2 style='text-align: center; color: #333;'>👨‍🎓 欢迎登录系统</h2><br>", unsafe_allow_html=True)
             with st.form("student_login"):
+                st.markdown("<h3 style='text-align: center; color: #555;'>👨‍🎓 学生/家长登录入口</h3><br>", unsafe_allow_html=True)
                 direction = st.selectbox("📝 选择方向", ["物理方向", "历史方向"])
                 name = st.text_input("👤 学生姓名", placeholder="请输入真实姓名")
                 stu_id = st.text_input("🔢 考号/学号", placeholder="请输入准确考号")
@@ -152,6 +197,7 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                     else: st.error("⚠️ 请完整填写姓名和考号")
     
     else:
+        # 登录后的界面
         c1, c2 = st.columns([4, 1])
         c1.markdown(f"**当前用户：** {st.session_state.logged_in_student} | **方向：** {st.session_state.logged_in_direction}")
         with c2:
@@ -301,10 +347,14 @@ if selected_nav in ["成绩总览", "深度诊断"]:
 elif selected_nav == "教师后台":
     
     if not st.session_state.is_admin:
+        # 🎓 显示新的网站主标题
+        st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1><br>", unsafe_allow_html=True)
+        
+        # 登录框居中
         col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
-            st.markdown("<br><h2 style='text-align: center; color: #333;'>👨‍🏫 教务管理中枢</h2><br>", unsafe_allow_html=True)
             with st.form("admin_login"):
+                st.markdown("<h3 style='text-align: center; color: #555;'>👨‍🏫 教务管理中枢</h3><br>", unsafe_allow_html=True)
                 pwd = st.text_input("🔐 管理员密码", type="password")
                 if st.form_submit_button("验证进入", use_container_width=True):
                     if pwd == ADMIN_PASSWORD:
