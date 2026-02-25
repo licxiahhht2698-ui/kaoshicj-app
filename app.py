@@ -42,7 +42,7 @@ else:
     client = None
 
 # ==============================================================================
-# 🛠️ 核心数据加载与动态光荣榜计算 (已修改为前五名并分行)
+# 🛠️ 核心数据加载与动态光荣榜计算
 # ==============================================================================
 @st.cache_data(ttl=600)
 def load_data(url, header_lines=0):
@@ -70,7 +70,6 @@ def get_dynamic_top5_banner():
                 if top_h: str_h = f"🌟 文科前五：{'、'.join(top_h)}"
                 
         if str_p or str_h:
-            # 组合HTML，使用 <br> 强制换行
             banner_html = "🎉 <b>成绩表彰光荣榜</b> 🏆<br>"
             if str_p: banner_html += f"<span style='font-size: 16px; color: #D97706;'>{str_p}</span>"
             if str_p and str_h: banner_html += "<br>"
@@ -82,8 +81,9 @@ def get_dynamic_top5_banner():
         return "🎉 欢迎使用英华学校高中部考试学情智能分析系统！ 🏆"
 
 # ==============================================================================
-# 🧠 AI 导师功能定义
+# 🧠 AI 导师功能定义 (加入了长达 30 天的超级省钱记忆缓存)
 # ==============================================================================
+@st.cache_data(ttl=2592000, show_spinner=False) # ttl=2592000秒，等于缓存整整 30 天
 def get_ai_advice_for_student(student_name, subject, weak_points, strong_points):
     if not client: return "⚠️ AI 尚未配置，无法生成建议。"
     prompt = f"你是拥有20年经验的高中{subject}教师。学生 {student_name} 优势：{strong_points}。薄弱：{weak_points}。请写约300字的个性化鼓励和提分计划。"
@@ -92,6 +92,7 @@ def get_ai_advice_for_student(student_name, subject, weak_points, strong_points)
         return res.choices[0].message.content
     except Exception as e: return f"AI 生成失败: {e}"
 
+@st.cache_data(ttl=2592000, show_spinner=False) # 教师端的教研分析同样缓存 30 天
 def get_ai_advice_for_teacher(subject, weak_points_list):
     if not client: return "⚠️ AI 尚未配置。"
     prompt = f"你是教研员。高三年级{subject}失分严重的共性薄弱点是：{weak_points_list}。请给老师们写约300字的讲评课教研建议。"
@@ -134,9 +135,9 @@ st.markdown("""
         margin-top: 0px;
         margin-bottom: 25px;
         box-shadow: 0 4px 12px rgba(252, 211, 77, 0.2);
-        line-height: 1.6; /* 增加了行距，让两行文字看起来更舒服 */
+        line-height: 1.6;
     }
-    .main-title { text-align: center; color: #1E3A8A; font-size: 28px; font-weight: 800; margin-bottom: 15px; } /* 字体从34px调整为28px */
+    .main-title { text-align: center; color: #1E3A8A; font-size: 28px; font-weight: 800; margin-bottom: 15px; }
     .ai-box { background: linear-gradient(135deg, #f0f7ff 0%, #e6f3ff 100%); border-left: 5px solid #0068C9; padding: 20px; border-radius: 8px; font-size: 15px; color: #333;}
 </style>
 """, unsafe_allow_html=True)
@@ -156,19 +157,14 @@ selected_nav = option_menu(
 if selected_nav in ["成绩总览", "深度诊断"]:
     
     if not st.session_state.logged_in_student:
-        # 主标题
         st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
-        # 横幅光荣榜 (包含两排前五名)
         banner_text = get_dynamic_top5_banner()
         st.markdown(f'<div class="congrats-banner">{banner_text}</div>', unsafe_allow_html=True)
         
-        # 左右护法 + 登录框
         col_left, col_mid, col_right = st.columns([1, 1.8, 1])
-        
         with col_left:
             st.markdown("<br><br>", unsafe_allow_html=True)
             if os.path.exists("panda.gif"): st.image("panda.gif", use_container_width=True)
-            
         with col_mid:
             with st.form("student_login"):
                 st.markdown("<h3 style='text-align: center; color: #555;'>👨‍🎓 学生/家长登录入口</h3><br>", unsafe_allow_html=True)
@@ -182,7 +178,6 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                         st.session_state.logged_in_direction = direction
                         st.rerun()
                     else: st.error("⚠️ 请完整填写姓名和考号")
-        
         with col_right:
             st.markdown("<br><br>", unsafe_allow_html=True)
             if os.path.exists("star.gif"): st.image("star.gif", use_container_width=True)
@@ -292,8 +287,8 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                                 
                                 st.divider()
                                 if AI_API_KEY:
-                                    if st.button(f"✨ 一键生成个性化提分建议", type="primary"):
-                                        with st.spinner("AI 导师正在分析..."):
+                                    if st.button(f"✨ 提取专家 AI 提分建议", type="primary"):
+                                        with st.spinner("AI 导师正在云端调取档案..."):
                                             w_str = "、".join(weak_points_list) if weak_points_list else "无"
                                             s_str = "、".join(strong_points_list) if strong_points_list else "无"
                                             ai_reply = get_ai_advice_for_student(st.session_state.logged_in_student, sel_sub, w_str, s_str)
@@ -367,6 +362,6 @@ elif selected_nav == "教师后台":
                         k_final = [{"知识点": kp, "掌握率": round(sum(rates)/len(rates)*100, 1)} for kp, rates in k_stats.items()]
                         df_k = pd.DataFrame(k_final).sort_values("掌握率")
                         st.plotly_chart(px.bar(df_k, x="掌握率", y="知识点", orientation='h'), use_container_width=True)
-                        if AI_API_KEY and st.button("✨ 一键生成教研建议", type="primary"):
-                            with st.spinner("AI 编写中..."):
+                        if AI_API_KEY and st.button("✨ 提取专家 AI 教研建议", type="primary"):
+                            with st.spinner("AI 正在云端调取报告..."):
                                 st.markdown(f"<div class='ai-box'>{get_ai_advice_for_teacher(sel_diagnosis, '、'.join(df_k.head(3)['知识点'].tolist()))}</div>", unsafe_allow_html=True)
