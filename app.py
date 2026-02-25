@@ -16,6 +16,9 @@ st.set_page_config(page_title="英华学校高中部考试学情智能分析", l
 # ==============================================================================
 try:
     ADMIN_PASSWORD = st.secrets["ADMIN_PWD"]
+    # 智能兼容：如果您在 Secrets 里配了 TEACHER_PWD 就用它，没配就和管理员密码一样
+    TEACHER_PASSWORD = st.secrets.get("TEACHER_PWD", ADMIN_PASSWORD) 
+    
     SCORE_URL_PHYSICS = st.secrets.get("URL_SCORE_PHYSICS", "")
     SCORE_URL_HISTORY = st.secrets.get("URL_SCORE_HISTORY", "")
     
@@ -51,7 +54,6 @@ def load_data(url, header_lines=0):
     except: return None
 
 def get_dynamic_top5_banner():
-    """自动读取总分表，提取理科和文科的前五名，并分两行显示"""
     str_p = ""
     str_h = ""
     try:
@@ -81,9 +83,9 @@ def get_dynamic_top5_banner():
         return "🎉 欢迎使用英华学校高中部考试学情智能分析系统！ 🏆"
 
 # ==============================================================================
-# 🧠 AI 导师功能定义 (加入了长达 30 天的超级省钱记忆缓存)
+# 🧠 AI 导师功能定义 (30天缓存)
 # ==============================================================================
-@st.cache_data(ttl=2592000, show_spinner=False) # ttl=2592000秒，等于缓存整整 30 天
+@st.cache_data(ttl=2592000, show_spinner=False)
 def get_ai_advice_for_student(student_name, subject, weak_points, strong_points):
     if not client: return "⚠️ AI 尚未配置，无法生成建议。"
     prompt = f"你是拥有20年经验的高中{subject}教师。学生 {student_name} 优势：{strong_points}。薄弱：{weak_points}。请写约300字的个性化鼓励和提分计划。"
@@ -92,7 +94,7 @@ def get_ai_advice_for_student(student_name, subject, weak_points, strong_points)
         return res.choices[0].message.content
     except Exception as e: return f"AI 生成失败: {e}"
 
-@st.cache_data(ttl=2592000, show_spinner=False) # 教师端的教研分析同样缓存 30 天
+@st.cache_data(ttl=2592000, show_spinner=False)
 def get_ai_advice_for_teacher(subject, weak_points_list):
     if not client: return "⚠️ AI 尚未配置。"
     prompt = f"你是教研员。高三年级{subject}失分严重的共性薄弱点是：{weak_points_list}。请给老师们写约300字的讲评课教研建议。"
@@ -107,11 +109,15 @@ def get_ai_advice_for_teacher(subject, weak_points_list):
 if 'logged_in_student' not in st.session_state: st.session_state.logged_in_student = None
 if 'logged_in_direction' not in st.session_state: st.session_state.logged_in_direction = None
 if 'is_admin' not in st.session_state: st.session_state.is_admin = False
+if 'is_teacher' not in st.session_state: st.session_state.is_teacher = False
+if 'teacher_subject' not in st.session_state: st.session_state.teacher_subject = None
 
 def logout():
     st.session_state.logged_in_student = None
     st.session_state.logged_in_direction = None
     st.session_state.is_admin = False
+    st.session_state.is_teacher = False
+    st.session_state.teacher_subject = None
     st.rerun()
 
 st.markdown("""
@@ -295,10 +301,12 @@ if selected_nav in ["成绩总览", "深度诊断"]:
                                             st.markdown(f"<div class='ai-box'><b>AI导师：</b><br><br>{ai_reply}</div>", unsafe_allow_html=True)
 
 # ==============================================================================
-# 🚀 页面 3: 教师后台
+# 🚀 页面 3: 教师后台 (包含超级管理 & 次级单科管理)
 # ==============================================================================
 elif selected_nav == "教师后台":
-    if not st.session_state.is_admin:
+    
+    # --- 1. 未登录状态下的登录界面 ---
+    if not st.session_state.is_admin and not st.session_state.is_teacher:
         st.markdown("<h1 class='main-title'>🏫 英华学校高中部考试学情智能分析系统</h1>", unsafe_allow_html=True)
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True) 
         
@@ -309,19 +317,34 @@ elif selected_nav == "教师后台":
         with col_mid:
             with st.form("admin_login"):
                 st.markdown("<h3 style='text-align: center; color: #555;'>👨‍🏫 教务管理中枢</h3><br>", unsafe_allow_html=True)
+                
+                # 动态选择身份
+                role = st.radio("请选择您的登录身份：", ["👨‍🏫 学科教师 (仅看本学科)", "👑 教务处/年级长 (全科全览)"], horizontal=True)
+                sel_sub = None
+                if "学科教师" in role:
+                    sel_sub = st.selectbox("📝 选择您任教的学科：", list(SUBJECT_URLS.keys()))
+                
                 pwd = st.text_input("🔐 管理密码", type="password")
+                
                 if st.form_submit_button("验证进入", use_container_width=True):
-                    if pwd == ADMIN_PASSWORD:
-                        st.session_state.is_admin = True
+                    # 如果选了教务处，必须输入ADMIN密码；如果选了学科教师，兼容两种密码
+                    if ("教务处" in role and pwd == ADMIN_PASSWORD) or ("学科教师" in role and (pwd == TEACHER_PASSWORD or pwd == ADMIN_PASSWORD)):
+                        if "教务处" in role:
+                            st.session_state.is_admin = True
+                        else:
+                            st.session_state.is_teacher = True
+                            st.session_state.teacher_subject = sel_sub
                         st.rerun()
-                    else: st.error("密码错误")
+                    else: 
+                        st.error("密码错误，请重试。")
         with col_right:
             st.markdown("<br><br>", unsafe_allow_html=True)
             if os.path.exists("star.gif"): st.image("star.gif", use_container_width=True)
             
-    else:
+    # --- 2. 教务处超级管理界面 ---
+    elif st.session_state.is_admin:
         c1, c2 = st.columns([5, 1])
-        c1.markdown("### ⚙️ 管理员控制台")
+        c1.markdown("### 👑 教务处全局控制台 (全科权限)")
         if c2.button("退出后台", use_container_width=True): logout()
         adm_menu = st.radio("功能：", ["🏆 班级成绩PK", "📈 学情总览", "🧠 AI教研"], horizontal=True)
         adm_direction = st.selectbox("方向", ["物理方向", "历史方向"])
@@ -365,3 +388,52 @@ elif selected_nav == "教师后台":
                         if AI_API_KEY and st.button("✨ 提取专家 AI 教研建议", type="primary"):
                             with st.spinner("AI 正在云端调取报告..."):
                                 st.markdown(f"<div class='ai-box'>{get_ai_advice_for_teacher(sel_diagnosis, '、'.join(df_k.head(3)['知识点'].tolist()))}</div>", unsafe_allow_html=True)
+
+    # --- 3. 学科教师单科隔离界面 ---
+    elif st.session_state.is_teacher:
+        current_sub = st.session_state.teacher_subject
+        # 提取学科纯文本 (例如把 "⚡ 物理" 变成 "物理")
+        pure_sub_name = current_sub.split(" ")[-1] if " " in current_sub else current_sub 
+        
+        c1, c2 = st.columns([5, 1])
+        c1.markdown(f"### 👨‍🏫 【{current_sub}】教师专属控制台 (已开启权限隔离)")
+        if c2.button("退出后台", use_container_width=True): logout()
+        
+        adm_menu = st.radio("专属功能：", [f"🏆 班级 {pure_sub_name} 成绩对比", f"🧠 {pure_sub_name} 共性诊断与 AI 教研"], horizontal=True)
+        adm_direction = st.selectbox("方向选择", ["物理方向", "历史方向"])
+        target_url = SCORE_URL_PHYSICS if adm_direction == "物理方向" else SCORE_URL_HISTORY
+        
+        if "成绩对比" in adm_menu:
+            df = load_data(target_url)
+            if df is not None:
+                # 权限隔离：严格检查该学科是否存在，如果存在只计算该学科
+                if pure_sub_name in df.columns and '班级' in df.columns:
+                    # 过滤掉非数字数据
+                    df[pure_sub_name] = pd.to_numeric(df[pure_sub_name], errors='coerce')
+                    class_avg = df.groupby('班级')[pure_sub_name].mean().round(1).reset_index()
+                    st.success(f"🔒 隐私保护已生效：您当前仅能查看各班级的【{pure_sub_name}】单科成绩分布，总分及其他科目已自动隐藏。")
+                    st.plotly_chart(px.bar(class_avg, x='班级', y=pure_sub_name, color='班级', text_auto=True, title=f"各班【{pure_sub_name}】均分对比"), use_container_width=True)
+                else:
+                    st.warning(f"⚠️ 在当前的【{adm_direction}】总成绩表中，未找到【{pure_sub_name}】科目的有效数据。请切换方向试试。")
+        
+        elif "教研" in adm_menu:
+            st.success(f"🔒 隐私保护已生效：您当前已直达【{current_sub}】题库底层数据。")
+            df_diag = load_data(SUBJECT_URLS.get(current_sub, ""), header_lines=[0, 1, 2])
+            if df_diag is not None:
+                k_stats = {}
+                for col in df_diag.columns:
+                    try: full = float(col[2])
+                    except: full = 0
+                    if full > 0 and '姓名' not in str(col[0]):
+                        kp = str(col[1]).strip()
+                        if kp not in k_stats: k_stats[kp] = []
+                        k_stats[kp].append(pd.to_numeric(df_diag[col], errors='coerce').mean() / full)
+                if k_stats:
+                    k_final = [{"知识点": kp, "掌握率": round(sum(rates)/len(rates)*100, 1)} for kp, rates in k_stats.items()]
+                    df_k = pd.DataFrame(k_final).sort_values("掌握率")
+                    st.plotly_chart(px.bar(df_k, x="掌握率", y="知识点", orientation='h', title=f"全年级【{pure_sub_name}】薄弱知识点扫描"), use_container_width=True)
+                    if AI_API_KEY and st.button(f"✨ 提取【{pure_sub_name}】AI 教研建议", type="primary"):
+                        with st.spinner("AI 正在云端调取报告..."):
+                            st.markdown(f"<div class='ai-box'>{get_ai_advice_for_teacher(current_sub, '、'.join(df_k.head(3)['知识点'].tolist()))}</div>", unsafe_allow_html=True)
+            else:
+                st.warning(f"⚠️ 暂未获取到【{current_sub}】的单科诊断表格。")
